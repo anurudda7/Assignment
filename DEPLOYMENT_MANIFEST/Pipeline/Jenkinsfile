@@ -1,0 +1,69 @@
+properties([[$class: 'JiraProjectProperty'], gitLabConnection(gitLabConnection: '', jobCredentialId: ''), [$class: 'RebuildSettings', autoRebuild: false, rebuildDisabled: false],
+
+                        parameters([
+                            string(
+                                defaultValue: '1.0.0',
+                                name: 'ImageTag',
+                                trim: true
+                            ),
+                            booleanParam(
+                                defaultValue: true,
+                                description: '',
+                                name: 'TestRequired'
+                            )
+                        ]),
+
+throttleJobProperty(categories: [], limitOneJobWithMatchingParams: false, maxConcurrentPerNode: 0, maxConcurrentTotal: 0, paramsToUseForLimit: '', throttleEnabled: false, throttleOption: 'project')
+])
+
+node {
+    environment {
+      TF_IN_AUTOMATION = 'true'
+    }
+
+    stage('Clone Repo') {
+      node('demo_node') {
+        checkout scm
+      }
+    }
+
+    stage('Push Docker Images') {
+      node('demo_node') {
+      // deploy docker image to ECR
+      sh 'aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 496391058917.dkr.ecr.ap-south-1.amazonaws.com'
+
+      sh '''#!/bin/bash
+
+        docker pull 496391058917.dkr.ecr.ap-south-1.amazonaws.com/maxweather-dev/weather-api:$ImageTag
+        docker tag 496391058917.dkr.ecr.ap-south-1.amazonaws.com/maxweather-dev/weather-api:$ImageTag 496391058917.dkr.ecr.ap-south-1.amazonaws.com/maxweather-staging/weather-api:$ImageTag
+        docker push 496391058917.dkr.ecr.ap-south-1.amazonaws.com/maxweather-staging/weather-api:$ImageTag
+
+      '''
+      }
+    }
+
+    stage('Approval') {
+        node('demo_node') {
+      script {
+        def deploymentApproval = input id: 'Deploy', message: 'Deploy to Staging?' , submitter: '7b02c3ec-5356-414a-bc96-455b19467dd1'
+      }
+        }
+    }
+
+    stage('Update Staging EKS Services') {
+      node('demo_node') {
+      sh '''#!/bin/bash
+
+            echo "deploying...................."
+
+            cd Staging
+            kubectl config set-context --current --namespace wether-app
+            kubectl apply -f services
+            kubectl apply -f deployments
+            kubectl set image deployment.v1.apps/php-apache php-apache=496391058917.dkr.ecr.ap-south-1.amazonaws.com/maxweather-staging/weather-api:$ImageTag
+            kubectl apply -f ingress
+
+      '''
+      }
+    }
+}

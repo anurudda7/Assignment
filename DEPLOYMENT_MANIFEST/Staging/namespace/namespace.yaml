@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wether-app
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pipeline
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amazon-cloudwatch
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prometheus
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grafana
+
+
+
+
+
+
+
+
