@@ -1,0 +1,55 @@
+pipeline {
+  agent { label 'master' }
+
+  options {
+        ansiColor('xterm')
+  }
+
+  environment {
+    PATH = "/usr/local/bin:${env.PATH}"
+    updateAvailable = false
+    currentVersion = ''
+    newVersion = ''
+  }
+
+  stages {
+
+
+    stage('check-updates') {
+      steps {
+        sh 'echo "Download artifacts ...................."'
+        sh '''#!/bin/bash
+            export SSHPASS='D+kaaB0utrlMNEB(i%B6'
+            sshpass -e sftp -oBatchMode=no -b - udpesub@ftp.support.wso2.com << !
+            cd /udpesub/CodeDrop/
+            mget -r *
+            bye
+            !
+            '''
+        sh 'echo "Check for New Updates ...................."'
+        sh '''#!/bin/bash 
+              \${currentVersion}=`cat ApimDeployments-version.txt`
+              \${newVersion}=`cat ApimDeployments/version.txt`
+              echo \${currentVersion} \${newVersion}
+              if [ \${newVersion//.} -gt \${currentVersion//.}  ] ; then echo "new verion available" ;  \${updateAvailable}='true'  ; fi
+              echo "status " \${updateAvailable}
+             '''
+      }
+    }
+    stage('Deploy') {
+          when { expression { return updateAvailable } }
+      steps {
+          sh 'echo "New Version Available .... "'
+          sh '''#!/bin/bash
+              IMAGE=`kubectl get deploy/nginx-deployment -o=jsonpath="{range .items[*]}{range.spec.template.spec.containers[*]}{.image}" -n wso2-test`
+              echo "FROM" $IMAGE > Dockerfile
+              cat ApimDeployments/README.txt >> Dockerfile
+              docker build . -t 101digital/wso2-test:nginx-''\${newVersion}
+              #docker push 101digital/wso2-test:nginx-''\${newVersion}
+              #kubectl set image deployment/nginx-deployment nginx=101digital/wso2-test:nginx-''\${newVersion} -n wso2-test
+              echo \${newVersion} > ApimDeployments-version.txt
+             '''
+      }
+      }//stage
+  }//stages
+}//end
